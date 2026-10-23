@@ -1,148 +1,120 @@
-💳 Credit Card Fraud Detection System
+# Credit Card Fraud Analytics: SQL + Python
 
 ![Python](https://img.shields.io/badge/Python-3.13-blue)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-blue)
-![XGBoost](https://img.shields.io/badge/XGBoost-AUC-0.9982-brightgreen)
-![Streamlit](https://img.shields.io/badge/Streamlit-Dashboard-red)
-![Status](https://img.shields.io/badge/Status-Complete-brightgreen)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16%2B-336791)
+![Streamlit](https://img.shields.io/badge/Streamlit-Dashboard-FF4B4B)
+![License](https://img.shields.io/badge/License-MIT-lightgrey)
 
-> An end-to-end fraud detection system built on 1.3 million real credit card
-> transactions — combining SQL analytics, statistical analysis, machine learning,
-> and an interactive dashboard.
+End-to-end fraud analytics on **1.3 million credit card transactions**:
+PostgreSQL for exploration, business analysis and rule-based detection
+(CTEs, window functions, views, indexes), Python for statistical testing and
+machine learning, and an interactive Streamlit dashboard.
 
+---
 
+## Business Problem
 
-🎯 Business Problem
+Card issuers need to find fraud quickly without blocking good customers. This
+project answers four questions with SQL and statistics:
 
-Credit card fraud costs the global economy **$32 billion annually**.
-Financial institutions need systems that can:
-- Detect fraudulent transactions in real time
-- Minimize false positives (flagging legitimate customers)
-- Identify high-risk merchants, categories and time patterns
-- Explain *why* a transaction is suspicious
+- Which categories, hours and states carry the most fraud risk?
+- How different are fraudulent transactions from legitimate ones?
+- How far can simple SQL rules go in flagging fraud?
+- How much better does a machine-learning model do, evaluated honestly on future transactions?
 
-This project builds exactly that — from raw data to a working fraud detection model.
+The analysis is offline (batch) on historical data.
 
+---
 
-
-📊 Dataset
+## Dataset
 
 | Property | Value |
 |---|---|
-| Source | [Kaggle — Credit Card Transactions](https://www.kaggle.com/datasets/priyamchoksi/credit-card-transactions-dataset) |
+| Source | [Kaggle: Credit Card Transactions Dataset](https://www.kaggle.com/datasets/priyamchoksi/credit-card-transactions-dataset) |
+| Type | **Simulated** transactions (generated with the Sparkov data generator) |
 | Rows | 1,296,675 transactions |
-| Period | January 2019 — June 2020 |
-| Fraud Rate | 0.58% (highly imbalanced) |
-| Legitimate Transactions | 1,289,169 (99.42%) |
-| Fraud Transactions | 7,506 (0.58%) |
-| Features | 24 columns |
+| Period | January 2019 to June 2020 |
+| Fraud rate | 0.58% (7,506 fraud / 1,289,169 legitimate) |
+| Columns | 24 |
 
+The CSV is not stored in this repo. Download it from Kaggle into `data/`.
 
+---
 
-🏗️ Project Structure
+## Project Structure
+
 ```
-credit-card-fraud-detection/
-├── README.md
-├── insights/
-│   ├── ml/
-│   │   ├── 01_roc_curve.png
-│   │   ├── 02_precision_recall.png
-│   │   ├── 03_confusion_matrix.png
-│   │   ├── 04_feature_importance.png
-│   │   └── 05_model_comparison.png
-│   ├── stats/
-│   │   ├── amount_by_category_boxplot.png
-│   │   ├── correlation_heatmap.png
-│   │   └── kde_amount_distribution.png
-│   ├── 01_fraud_vs_legit.png
-│   ├── 02_spending_by_category.png
-│   ├── 03_fraud_rate_by_category.png
-│   ├── 04_amount_distribution.png
-│   ├── 05_fraud_by_hour.png
-│   ├── 06_monthly_trend.png
-│   ├── 07_fraud_by_gender.png
-│   └── 08_fraud_by_state.png
+├── sql/
+│   ├── 01_schema.sql           table definition, constraints, CSV load
+│   ├── 02_exploration.sql      profiling, class balance, null & duplicate checks
+│   ├── 03_analysis.sql         business questions (category, hour, state, monthly MoM, merchant)
+│   ├── 04_fraud_detection.sql  velocity check (LAG), spend vs card history, risk-score view
+│   └── 05_views_indexes.sql    indexes, reporting views, materialized card profile, EXPLAIN
 ├── python/
+│   ├── db.py                   database connection from environment variables
 │   ├── 01_visualizations.py
 │   ├── 02_statistical_analysis.py
-│   ├── 03_dashboard.py
+│   ├── 03_dashboard.py         Streamlit app
 │   └── 04_machine_learning.py
-├── sql/
-│   ├── 01_schema.sql
-│   ├── 02_exploration.sql
-│   ├── 03_analysis.sql
-│   ├── 04_fraud_detection.sql
-│   └── 05_views_indexes.sql
-└── SQL_Dataset/
-    └── credit_card_transactions.csv
+├── insights/                   generated charts (stats/, ml/)
+├── .env.example
+└── requirements.txt
 ```
 
+---
 
-
-🔧 Tech Stack
+## Tech Stack
 
 | Layer | Tools |
 |---|---|
-| Database | PostgreSQL 18 |
-| SQL | Window functions, CTEs, subqueries, views, indexes |
+| Database | PostgreSQL |
+| SQL | CTEs, window functions (LAG, running averages), FILTER, views, materialized views, partial indexes |
 | Language | Python 3.13 |
-| Data | pandas, numpy |
-| Visualization | matplotlib, seaborn, plotly |
-| Statistics | scipy |
-| Machine Learning | scikit-learn, XGBoost, imbalanced-learn |
+| Data | pandas, NumPy |
+| Visualization | matplotlib, seaborn, Plotly |
+| Statistics | SciPy |
+| Machine learning | scikit-learn, XGBoost, imbalanced-learn |
 | Dashboard | Streamlit |
 
+---
 
+## SQL Analysis
 
-📁 SQL Analysis
+All queries are in [`sql/`](sql/). Highlights:
 
-### Business Questions Answered
-
-**1. What is the overall fraud rate?**
+**Fraud rate by category** (`03_analysis.sql`)
 ```sql
-SELECT 
-    is_fraud,
-    COUNT(*)                                          AS total,
-    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) AS percentage
-FROM transactions
-GROUP BY is_fraud;
--- Result: 99.42% legitimate | 0.58% fraud
-```
-
-**2. Which categories have the highest fraud rate?**
-```sql
-SELECT 
-    category,
-    ROUND(SUM(is_fraud) * 100.0 / COUNT(*), 2)       AS fraud_rate_pct
+SELECT category,
+       COUNT(*)                                   AS transactions,
+       SUM(is_fraud)                              AS fraud_count,
+       ROUND(SUM(is_fraud) * 100.0 / COUNT(*), 2) AS fraud_rate_pct
 FROM transactions
 GROUP BY category
 ORDER BY fraud_rate_pct DESC;
--- Result: shopping_net (1.75%) > misc_net (1.42%) > grocery_pos (1.36%)
+-- shopping_net (1.75%) > misc_net (1.42%) > grocery_pos (1.36%)
 ```
 
-**3. Which hours are most dangerous?**
+**Spend vs the card's own history, without look-ahead** (`04_fraud_detection.sql`)
 ```sql
-SELECT 
-    EXTRACT(HOUR FROM trans_date_trans_time)          AS hour,
-    ROUND(SUM(is_fraud) * 100.0 / COUNT(*), 2)       AS fraud_rate_pct
-FROM transactions
-GROUP BY hour
-ORDER BY fraud_rate_pct DESC
-LIMIT 3;
--- Result: 22:00 (2.88%), 23:00 (2.84%), 01:00 (1.55%)
+AVG(amt) OVER (PARTITION BY cc_num
+               ORDER BY trans_date_trans_time
+               ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS prior_avg
 ```
+The window ends one row *before* the current transaction, so the average uses
+only what was known at the time.
 
-**4. Multi-factor fraud scoring system:**
-```sql
--- Assigns risk score based on amount, category and time
--- High Risk = score >= 5 | Medium Risk = score >= 3
--- Identified 15,856 high-risk transactions
--- True Positives: 3,996 actual fraud caught (53% detection rate)
-```
+**Velocity check** uses `LAG()` per card to find transactions within 10 minutes
+of the previous one.
 
+**Rule-based risk score** (view `v_risk_scores`, max 7): amount band (0-3) +
+high-risk online category (2) + late-night hour 22:00-03:59 (2). Scores ≥ 5 are
+High Risk, ≥ 3 Medium Risk.
 
+<!-- RULE_RESULTS: paste the output of query 4 in sql/04_fraud_detection.sql here -->
 
-## 📈 Key Findings
+---
+
+## Key Findings
 
 ### Finding 1 — Fraud amounts are 7.8x higher
 ```
@@ -196,131 +168,10 @@ Strength                   : Weak positive correlation
 Meaning                    : Higher amounts = more likely fraud
 ```
 
-### Finding 7 — Velocity check results
-```
-Transactions within 10 minutes : strong fraud signal
-SQL scoring system detection   : 53% of actual fraud flagged
-High-risk transactions found   : 15,856
-```
+---
 
+## Statistical Tests
 
-
-🤖 Machine Learning Pipeline
-
-### Feature Engineering (13 features)
-```
-Time features    : hour, day_of_week, month, is_weekend, is_night
-Spend features   : spend_ratio (amt / customer average), customer_avg
-Geographic       : distance (customer to merchant location)
-Behavioral       : daily_trans_count (transaction velocity)
-Encoded          : category_encoded, gender_encoded, city_pop
-```
-
-### Dataset Split
-```
-Total samples  : 1,296,675
-Train set      : 1,037,340 rows (80%)
-Test set       : 259,335 rows  (20%)
-Strategy       : Stratified split — fraud ratio preserved in both sets
-```
-
-### Class Imbalance — SMOTE
-```
-Before SMOTE : 6,005 fraud    | 1,031,335 legit
-After SMOTE  : 103,133 fraud  | 1,031,335 legit
-Strategy     : 10% sampling ratio
-Purpose      : Prevent model from ignoring rare fraud cases
-```
-
-### Model Results
-
-| Model | ROC-AUC | Avg Precision | Fraud Recall | Accuracy |
-|---|---|---|---|---|
-| Logistic Regression | 0.9404 | 0.2928 | 82% | 88% |
-| Random Forest | 0.9921 | 0.7936 | 92% | 98% |
-| **XGBoost** | **0.9982** | **0.9039** | **97%** | **99%** |
-
-### Best Model — XGBoost
-```
-ROC-AUC Score       : 0.9982 (near perfect discrimination)
-Fraud Recall        : 97%   (catches 97 of every 100 fraud cases)
-Avg Precision       : 0.9039
-Accuracy            : 99%
-Test set fraud cases: 1,501
-Fraud caught        : ~1,456 cases
-Fraud missed        : ~45 cases only
-```
-
-### Top 5 Features by Importance (XGBoost)
-```
-Rank  Feature           Importance   Meaning
-1     is_night          0.400        Night transactions most suspicious
-2     amt               0.382        High amounts = strong fraud signal
-3     category_encoded  0.066        Category matters significantly
-4     hour              0.036        Specific hours are riskier
-5     customer_avg      0.023        Deviation from customer norm
-```
-
-
-
-📊 Visualizations
-
-### Fraud Overview
-![Fraud vs Legit](insights/01_fraud_vs_legit.png)
-
-### Spending Analysis
-![Spending by Category](insights/02_spending_by_category.png)
-
-### Fraud Rate by Category
-![Fraud Rate](insights/03_fraud_rate_by_category.png)
-
-### Transaction Amount Distribution
-![Amount Distribution](insights/04_amount_distribution.png)
-
-### Time Pattern — Fraud by Hour
-![Fraud by Hour](insights/05_fraud_by_hour.png)
-
-### Monthly Spending Trend
-![Monthly Trend](insights/06_monthly_trend.png)
-
-### Geographic Analysis
-![Fraud by State](insights/08_fraud_by_state.png)
-
-### Statistical Analysis — Correlation Heatmap
-![Correlation Heatmap](insights/stats/correlation_heatmap.png)
-
-### ML — ROC Curve Comparison
-![ROC Curve](insights/ml/01_roc_curve.png)
-
-### ML — Feature Importance
-![Feature Importance](insights/ml/04_feature_importance.png)
-
-### ML — Confusion Matrix (XGBoost)
-![Confusion Matrix](insights/ml/03_confusion_matrix.png)
-
-### ML — Model Comparison
-![Model Comparison](insights/ml/05_model_comparison.png)
-
-
-🖥️ Interactive Dashboard
-
-Built with Streamlit — fully interactive with live filters:
-
-**Features:**
-- Filter by category, gender, amount range, transaction type
-- 5 live KPI metrics that update instantly
-- 8 interactive Plotly charts with hover and zoom
-- Monthly spending vs fraud count dual-axis chart
-- Raw data explorer with fraud-only toggle
-
-**Run locally:**
-```bash
-streamlit run python/03_dashboard.py
-```
-
-
-
-📊 Statistical Analysis Results
 ```
 Test 1 — Descriptive Statistics
   Fraud mean    : $531.32  |  Legit mean : $67.67
@@ -343,27 +194,84 @@ Test 5 — Chi-Square Test (Hour)
   Result : Hour of day IS significantly associated with fraud (p < 0.0001) ✅
 ```
 
+---
 
-🚀 How to Run
+## Machine Learning
 
-**1. Clone the repo:**
+### Approach
+
+- **Features (13):** amount, hour, day of week, month, weekend and night flags,
+  spend ratio vs the card's *previous* average, the card's previous average,
+  customer-merchant distance, number of the card's transactions in the
+  *previous* 24 hours, encoded category and gender, city population.
+- **No look-ahead.** Customer features use only earlier transactions.
+- **Time-based split.** Train on the earliest 80% of transactions, test on the
+  latest 20%, because a fraud model always scores future transactions.
+- **Class imbalance:** SMOTE on the training set only (10% ratio) for Logistic
+  Regression and Random Forest; `scale_pos_weight` for XGBoost.
+- **Metrics:** average precision (PR-AUC) is the main metric. With 0.58% fraud,
+  ROC-AUC and accuracy look high even for weak models.
+
+### Results
+
+<!-- ML_RESULTS: fill from insights/ml/metrics.json after running python/04_machine_learning.py -->
+
+### Why the results changed
+
+An earlier version reported ROC-AUC 0.9982 and 97% recall. That evaluation was
+optimistic for two reasons:
+
+1. **Look-ahead features.** The customer's average spend and daily transaction
+   count were computed over the whole dataset, including the transaction being
+   scored and later ones.
+2. **Random split.** Shuffling put future transactions into training.
+
+Both are fixed: features use only the past, and the test set is strictly later
+than the training set.
+
+![Precision-recall curves](insights/ml/02_precision_recall.png)
+
+---
+
+## Interactive Dashboard
+
+Built with Streamlit:
+
+- Filters by category, gender, amount range and transaction type
+- 5 KPI metrics that update with the filters
+- 8 interactive Plotly charts, including monthly spend vs fraud count
+- Raw data explorer with a fraud-only toggle
+
+---
+
+## How to Run
+
+**1. Clone and install**
 ```bash
-git clone https://github.com/YOUR_USERNAME/credit-card-fraud-detection.git
-cd credit-card-fraud-detection
+git clone https://github.com/jd878-gif/credit-card-fraud-analytics.git
+cd credit-card-fraud-analytics
+pip install -r requirements.txt
 ```
 
-**2. Install dependencies:**
+**2. Configure the database connection.** Copy `.env.example` to `.env` and set
+your PostgreSQL credentials. `.env` is git-ignored.
+
+**3. Create the table and load the data**
 ```bash
-pip install pandas matplotlib seaborn psycopg2-binary plotly streamlit scipy scikit-learn imbalanced-learn xgboost
+createdb credit_card_db
+psql -d credit_card_db -f sql/01_schema.sql
+psql -d credit_card_db -c "\copy transactions FROM 'data/credit_card_transactions.csv' WITH (FORMAT csv, HEADER true)"
+psql -d credit_card_db -f sql/05_views_indexes.sql
 ```
 
-**3. Set up PostgreSQL:**
+**4. Run the SQL analysis**
 ```bash
-psql -U postgres -d credit_card_db
-\copy transactions FROM 'SQL_Dataset/credit_card_transactions.csv' DELIMITER ',' CSV HEADER QUOTE '"';
+psql -d credit_card_db -f sql/02_exploration.sql
+psql -d credit_card_db -f sql/03_analysis.sql
+psql -d credit_card_db -f sql/04_fraud_detection.sql
 ```
 
-**4. Run the pipeline:**
+**5. Run the Python pipeline** (from the repo root)
 ```bash
 python python/01_visualizations.py
 python python/02_statistical_analysis.py
@@ -371,30 +279,22 @@ python python/04_machine_learning.py
 streamlit run python/03_dashboard.py
 ```
 
+---
 
+## Future Improvements
 
-💡 Future Improvements
-
-- Add deep learning model (LSTM for sequence-based fraud detection)
-- Deploy dashboard to Streamlit Cloud (free hosting)
-- Add real-time prediction API using FastAPI
-- Implement model explainability with SHAP values
-- Add geographic heatmap using folium
-
-
-
-👤 Author
-
-**Jeet Dave**
-- GitHub: [jd878-gif](https://github.com/jd878-gif)
-- LinkedIn: [jeetdave11](https://linkedin.com/in/jeetdave11)
+- SHAP values to explain individual predictions
+- Tune the decision threshold for a target precision and report the business cost of false positives
+- Deploy the dashboard to Streamlit Community Cloud
+- Serve the model behind a FastAPI endpoint
 
 ---
 
-📄 License
+## Author
 
-MIT License — feel free to use this project as a reference!
+**Jeet Dave** · MS Data Science, NJIT (May 2027)
+[GitHub](https://github.com/jd878-gif) · [LinkedIn](https://linkedin.com/in/jeetdave11)
 
----
+## License
 
-⭐ **If this project helped you, please give it a star!**
+Code: MIT. Data: see the dataset's Kaggle page for its license.
